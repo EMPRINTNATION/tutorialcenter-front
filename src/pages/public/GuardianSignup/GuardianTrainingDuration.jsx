@@ -137,6 +137,7 @@ export default function GuardianTrainingDuration() {
     setLoading(true);
 
     const payload = students.map((s) => ({
+      id: s.id, // ✅ Preserve ID from backend
       name: s.name,
       email: s.email,
       firstname: s.firstname,

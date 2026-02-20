@@ -74,6 +74,14 @@ export default function GuardianAddedStudentBiodata() {
         setToast({ type: "error", message: "Please upload an image file." });
         return;
       }
+
+      // ✅ Added 2MB Limit
+      const MAX_SIZE = 2 * 1024 * 1024; // 2MB
+      if (file.size > MAX_SIZE) {
+        setToast({ type: "error", message: "File is too large! Maximum size is 2MB." });
+        return;
+      }
+
       const reader = new FileReader();
       reader.onloadend = () => {
         handleChange(index, "display_picture", reader.result);
@@ -155,13 +163,6 @@ export default function GuardianAddedStudentBiodata() {
 
     setLoading(true);
 
-    const storedGuardianData = JSON.parse(
-      localStorage.getItem("guardianStudents") || "{}"
-    );
-    const generalPassword = storedGuardianData.password || "Password@123";
-    console.log("Guardian data from localStorage:", storedGuardianData);
-console.log("Password being used:", generalPassword);
-
     try {
       const updatedStudents = [];
 
@@ -169,37 +170,10 @@ console.log("Password being used:", generalPassword);
         const student = studentsBiodata[i];
         
         const trimmedEntry = student.email ? student.email.trim() : "";
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        const isEmail = emailRegex.test(trimmedEntry);
+        const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEntry);
 
-        const registerPayload = {
-          email: isEmail ? trimmedEntry : null,
-          tel: isEmail ? null : trimmedEntry,
-          password: generalPassword,
-          confirmPassword: generalPassword,
-        };
-
-        try {
-          const regResponse = await axios.post(
-            `${API_BASE_URL}/api/students/register`,
-            registerPayload
-          );
-          console.log("student registered", regResponse.data);
-        } catch (regErr) {
-          console.error("Registration FAILED for:", student.name);
-  console.error("Status:", regErr.response?.status);
-  console.error("Errors:", regErr.response?.data?.errors);
-  console.error("Message:", regErr.response?.data?.message);
-  console.error("Payload sent:", registerPayload);
-          console.warn(
-            `Registration warning for ${student.name}:`,
-            regErr.response?.data
-          );
-           setToast({
-    type: "error",
-    message: `Failed to register ${student.name}: ${regErr.response?.data?.message || regErr.message}`
-  });
-        }
+        // ✅ REMOVED redundant registration call as it causes 422 (tel/email already taken)
+        // Students are already registered during the OTP verification phase.
 
         const biodataPayload = {
           firstname: student.firstname,
@@ -211,29 +185,55 @@ console.log("Password being used:", generalPassword);
           location: student.location,
           address: student.address,
           department: student.department,
+          display_picture: student.display_picture, // ✅ Added Base64 image to payload
         };
 
-        const bioRes = await axios.post(
-          `${API_BASE_URL}/api/students/biodata`,
-          biodataPayload
-        );
+        try {
+          const bioRes = await axios.post(
+            `${API_BASE_URL}/api/students/biodata`,
+            biodataPayload
+          );
 
-        if (bioRes.data && bioRes.data.student) {
-          updatedStudents.push({
-            ...student,
-            ...bioRes.data.student, 
+          if (bioRes.data && bioRes.data.student) {
+            updatedStudents.push({
+              ...student,
+              ...bioRes.data.student, 
+              display_picture: null, // ✅ Clear Base64 before saving to state/storage to save space
+            });
+          } else {
+            throw new Error(`Failed to retrieve student ID for ${student.name}`);
+          }
+        } catch (bioErr) {
+          console.error("Biodata submission FAILED for:", student.name);
+          console.error("Backend errors:", bioErr.response?.data?.errors);
+          
+          setToast({
+            type: "error",
+            message: `Submission failed for ${student.name}: ${bioErr.response?.data?.message || "Check fields."}`
           });
-        } else {
-          throw new Error(`Failed to retrieve student ID for ${student.name}`);
+          
+          // Show field-specific errors if available
+          if (bioErr.response?.data?.errors) {
+            const serverErrors = bioErr.response.data.errors;
+            const formattedErrors = {};
+            Object.keys(serverErrors).forEach(key => {
+              formattedErrors[`${i}_${key}`] = Array.isArray(serverErrors[key]) ? serverErrors[key][0] : serverErrors[key];
+            });
+            setErrors(prev => ({ ...prev, ...formattedErrors }));
+          }
+          
+          setLoading(false);
+          return; // Stop the loop if one fails
         }
       }
 
+      // ✅ Save to localStorage WITHOUT Base64 strings to prevent QuotaExceededError
       localStorage.setItem(
         "guardianStudentsBiodata",
-        JSON.stringify(updatedStudents)
+        JSON.stringify(updatedStudents.map(s => ({ ...s, display_picture: null })))
       );
 
-      setToast({ type: "success", message: "All students registered successfully!" });
+      setToast({ type: "success", message: "All biodata submitted successfully!" });
 
       setTimeout(() => {
         setLoading(false);
@@ -241,10 +241,10 @@ console.log("Password being used:", generalPassword);
       }, 1500);
 
     } catch (err) {
-      console.error("Error in student registration loop:", err);
+      console.error("Error in biodata loop:", err);
       setToast({
         type: "error",
-        message: err.message || "Failed to register students.",
+        message: err.message || "Failed to process data.",
       });
       setLoading(false);
     }

@@ -17,49 +17,51 @@ export default function AddedStudentOTP() {
 
   const API_BASE_URL = process.env.REACT_APP_API_URL || "http://tutorialcenter-back.test";
 
-  const inputRefs = {
-    num1: useRef(null),
-    num2: useRef(null),
-    num3: useRef(null),
-    num4: useRef(null),
-    num5: useRef(null),
-    num6: useRef(null),
-  };
+  const hasRegisteredRef = useRef(false);
+  const inputRefs = useRef([]);
+
+  // Helper to clean phone number
+  const cleanPhone = useCallback((str) => str.replace(/[\s\-().]/g, ""), []);
 
   // Register a student
   const registerStudent = useCallback(async (index, student, password) => {
+    if (student.verified) return; // Skip if already verified
+
     setRegistering(true);
     setMsg("");
 
-     console.log("=== Attempting to register student ===");
-  console.log("Student name:", student.name);
-  console.log("Student tel:", student.tel);
-  console.log("Password:", password);
-  console.log("Payload:", {
-    tel: student.tel,
-    password: password,
-    confirmPassword: password,
-    password_confirmation: password,
-  });
-
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/students/register`, {
+      await axios.post(`${API_BASE_URL}/api/students/register`, {
         tel: student.tel,
         password: password,
         confirmPassword: password,
-        // password_confirmation: password,
+        password_confirmation: password,
       });
-      console.log("✓ Registration successful:", response.data);
 
+      console.log(`✓ OTP sent to ${student.name}`);
       setMsg(<span className="text-green-500">OTP sent to {student.name}</span>);
     } catch (err) {
       console.error("Registration error:", err);
-      console.error("=== Registration FAILED ===");
-    console.error("Status:", err.response?.status);
-    console.error("Error data:", err.response?.data);
-    console.error("Validation errors:", err.response?.data?.errors);
-    console.error("Message:", err.response?.data?.message);
-      setMsg(<span className="text-red-500">Failed to send OTP. Please try again.</span>);
+      
+      if (err.response?.status === 422 || err.response?.status === 500) {
+        const errorMsg = err.response?.data?.errors || err.response?.data?.message || "";
+        const errorString = typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg);
+        
+        if (errorString.includes('UNIQUE') || errorString.includes('already') || errorString.includes('taken')) {
+          setMsg(
+            <span className="text-yellow-600">
+              Student already registered. Use the OTP sent to their phone.
+            </span>
+          );
+          return;
+        }
+      }
+      
+      setMsg(
+        <span className="text-red-500">
+          Failed to send OTP. {err.response?.data?.message || "Please try again"}
+        </span>
+      );
     } finally {
       setRegistering(false);
     }
@@ -67,71 +69,91 @@ export default function AddedStudentOTP() {
 
   // Load students from localStorage
   useEffect(() => {
+    if (hasRegisteredRef.current) return;
+    hasRegisteredRef.current = true;
+
     const stored = localStorage.getItem("guardianStudents");
     if (stored) {
       const parsed = JSON.parse(stored);
       
-      // Filter only phone students
-      const phoneStudents = parsed.students.filter(s => {
-        const cleaned = s.email.replace(/[\s\-().]/g, "");
-        const phoneRegex = /^(\+234|234|0)(70|80|81|90|91)\d{8}$/;
-        return phoneRegex.test(cleaned);
-      });
+      const phoneStudents = parsed.students
+        .filter(s => {
+          const cleaned = cleanPhone(s.email);
+          const phoneRegex = /^(\+234|234|0)(70|80|81|90|91)\d{8}$/;
+          return phoneRegex.test(cleaned);
+        })
+        .map(s => ({
+          ...s,
+          tel: cleanPhone(s.email),
+          password: parsed.password,
+          verified: !!s.verified, // Check for existing verification
+        }));
 
-      setStudents(phoneStudents.map(s => ({
-        ...s,
-        verified: false,
-        tel: s.email.replace(/[\s\-().]/g, ""),
-        password: parsed.password,
-      })));
-       console.log("Phone students loaded:", phoneStudents);
-    console.log("Cleaned tel values:", phoneStudents.map(s => s.email.replace(/[\s\-().]/g, "")));
+      setStudents(phoneStudents);
 
-      // Register first student immediately
-       if (phoneStudents.length > 0) {
-      const firstStudent = {
-        ...phoneStudents[0],
-        tel: phoneStudents[0].email.replace(/[\s\-().]/g, ""),
-        password: parsed.password,
-      };
-      registerStudent(0, firstStudent, parsed.password);
-    }
+      // Find first unverified student
+      const firstUnverifiedIdx = phoneStudents.findIndex(s => !s.verified);
+      
+      if (firstUnverifiedIdx !== -1) {
+        setCurrentIndex(firstUnverifiedIdx);
+        const student = phoneStudents[firstUnverifiedIdx];
+        registerStudent(firstUnverifiedIdx, student, parsed.password);
+      } else if (phoneStudents.length > 0) {
+        // All verified
+        navigate("/register/guardian/student/biodata");
+      }
     } else {
       navigate("/register/guardian/addstudent");
     }
-  }, [navigate, registerStudent]);
+  }, [navigate, registerStudent, cleanPhone]);
 
   // Timer countdown
   useEffect(() => {
-    if (count > 0 && !students[currentIndex]?.verified) {
+    if (count > 0 && students[currentIndex] && !students[currentIndex].verified) {
       const timer = setInterval(() => setCount(prev => prev - 1), 1000);
       return () => clearInterval(timer);
     }
   }, [count, currentIndex, students]);
 
-  // Auto-focus first input (inputRefs is stable — object of refs created at render)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // Auto-focus input
   useEffect(() => {
-    inputRefs.num1.current?.focus();
+    inputRefs.current[0]?.focus();
   }, [currentIndex]);
 
+  const updateLocalStorageVerification = (index) => {
+    const stored = localStorage.getItem("guardianStudents");
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      // We need to match the student in the original array.
+      // PhoneStudents uses the filtered index, but we stored names/emails.
+      const currentStudent = students[index];
+      const studentToUpdate = parsed.students.find(s => s.name === currentStudent.name && cleanPhone(s.email) === currentStudent.tel);
+      
+      if (studentToUpdate) {
+        studentToUpdate.verified = true;
+        localStorage.setItem("guardianStudents", JSON.stringify(parsed));
+      }
+    }
+  };
+
   // Handle OTP input
-  const handleChange = (e) => {
-    const { name, value } = e.target;
+  const handleChange = (index, e) => {
+    const value = e.target.value;
     if (value.length > 1) return;
 
-    setOtp(prev => ({ ...prev, [name]: value }));
+    const newOtp = { ...otp, [`num${index + 1}`]: value };
+    setOtp(newOtp);
 
     // Auto-focus next input
-    if (value) {
-      const nextInput = {
-        num1: "num2", num2: "num3", num3: "num4",
-        num4: "num5", num5: "num6",
-      }[name];
+    if (value && index < 5) {
+      inputRefs.current[index + 1]?.focus();
+    }
+  };
 
-      if (nextInput && inputRefs[nextInput]) {
-        inputRefs[nextInput].current.focus();
-      }
+  // Handle backspace
+  const handleKeyDown = (index, e) => {
+    if (e.key === "Backspace" && !otp[`num${index + 1}`] && index > 0) {
+      inputRefs.current[index - 1]?.focus();
     }
   };
 
@@ -155,25 +177,28 @@ export default function AddedStudentOTP() {
         otp: otpCode,
       });
 
-      // Mark as verified
+      // Mark as verified in state
       const updatedStudents = [...students];
       updatedStudents[currentIndex].verified = true;
       setStudents(updatedStudents);
 
+      // Mark as verified in localStorage
+      updateLocalStorageVerification(currentIndex);
+
       // Check if more students to verify
       if (currentIndex < students.length - 1) {
         // Move to next student
-        setCurrentIndex(currentIndex + 1);
+        const nextIdx = currentIndex + 1;
+        setCurrentIndex(nextIdx);
         setOtp({ num1: "", num2: "", num3: "", num4: "", num5: "", num6: "" });
-        setCount(120); // Reset timer
+        setCount(60); 
         setMsg(<span className="text-green-500">✓ {currentStudent.name} verified!</span>);
         
         // Register next student
         setTimeout(() => {
-          registerStudent(currentIndex + 1, students[currentIndex + 1], currentStudent.password);
+          registerStudent(nextIdx, students[nextIdx], currentStudent.password);
         }, 1000);
       } else {
-        // All students verified - proceed to biodata
         setMsg(<span className="text-green-500">✓ All students verified!</span>);
         setTimeout(() => {
           navigate("/register/guardian/student/biodata");
@@ -194,7 +219,7 @@ export default function AddedStudentOTP() {
       await axios.post(`${API_BASE_URL}/api/students/resend-phone-otp`, {
         tel: currentStudent.tel,
       });
-      setCount(120);
+      setCount(60);
       setMsg(<span className="text-green-500">OTP resent to {currentStudent.name}</span>);
     } catch (err) {
       setMsg(<span className="text-red-500">Failed to resend OTP</span>);
@@ -204,7 +229,16 @@ export default function AddedStudentOTP() {
   const currentStudent = students[currentIndex];
   const progress = students.length > 0 ? ((currentIndex + 1) / students.length) * 100 : 0;
 
-  if (!currentStudent) return <div>Loading...</div>;
+  if (!currentStudent) return (
+    <div className="flex items-center justify-center min-h-screen">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+        <p className="text-gray-600">Loading students...</p>
+      </div>
+    </div>
+  );
+
+  
 
   return (
     <div className="w-full min-h-screen md:h-screen flex flex-col md:flex-row font-sans overflow-x-hidden">
@@ -255,22 +289,24 @@ export default function AddedStudentOTP() {
                 <p className="text-sm text-gray-500">
                   OTP sent to <span className="font-semibold">{currentStudent.tel}</span>
                 </p>
-                <p className="text-sm text-gray-400 mt-1">
-                  (Hint: The code is 123456 for testing)
-                </p>
+                {process.env.NODE_ENV === "development" && (
+                  <p className="text-sm text-gray-400 mt-1">
+                    (Hint: The code is 123456 for testing)
+                  </p>
+                )}
                 {msg && <p className="mt-2">{msg}</p>}
               </div>
 
               {/* OTP Inputs */}
               <div className="flex justify-center gap-2 my-6">
-                {["num1", "num2", "num3", "num4", "num5", "num6"].map((field) => (
+                {[0, 1, 2, 3, 4, 5].map((idx) => (
                   <input
-                    key={field}
-                    ref={inputRefs[field]}
-                    name={field}
+                    key={idx}
+                    ref={(el) => (inputRefs.current[idx] = el)}
                     type="text"
-                    value={otp[field]}
-                    onChange={handleChange}
+                    value={otp[`num${idx + 1}`]}
+                    onChange={(e) => handleChange(idx, e)}
+                    onKeyDown={(e) => handleKeyDown(idx, e)}
                     maxLength="1"
                     placeholder="0"
                     className="w-12 h-12 text-center text-lg font-semibold border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200"

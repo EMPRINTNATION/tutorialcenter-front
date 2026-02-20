@@ -1,110 +1,87 @@
 import axios from "axios";
-import { useState } from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import TC_logo from "../../../assets/images/tutorial_logo.png";
-import ReturnArrow from "../../../assets/svg/return arrow.svg";
 import signup_img from "../../../assets/images/student_sign_up.jpg";
-import { EyeIcon, EyeSlashIcon } from "@heroicons/react/24/outline";
+import { 
+  EyeIcon, 
+  EyeSlashIcon, 
+  ChevronLeftIcon 
+} from "@heroicons/react/24/outline";
 
 export default function StudentRegistration() {
-  const navigate = useNavigate(); // Initializing navigation
+  const navigate = useNavigate();
   const [toast, setToast] = useState(null);
-  const [errors, setErrors] = useState({}); // Initializing errors
-  const [msg, setMsg] = useState({ text: "", type: "" });
-  const [loading, setLoading] = useState(false); // loading for button press
+  const [errors, setErrors] = useState({});
+  const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [formData, setFormData] = useState({
     entry: "",
     password: "",
     confirmPassword: "",
+    rememberMe: false,
   });
-  const API_BASE_URL =
-    process.env.REACT_APP_API_URL || "http://tutorialcenter-back.test";
 
-  // Capture each user entries
+  const API_BASE_URL = process.env.REACT_APP_API_URL || "http://tutorialcenter-back.test";
+
   const handleChange = (e) => {
+    const { name, value, type, checked } = e.target;
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value,
+      [name]: type === "checkbox" ? checked : value,
     });
   };
 
-  // Validate form data before submission
   const validateForm = () => {
     const newErrors = {};
-
-    if (!formData.entry.trim()) {
-      newErrors.entry = "Entry is required";
-    }
-
-    if (!formData.password) {
-      newErrors.password = "Password is required";
-    }
-
-    if (!formData.confirmPassword) {
-      newErrors.confirmPassword = "Confirm Password is required";
+    if (!formData.entry.trim()) newErrors.entry = "Email or Phone is required";
+    if (!formData.password) newErrors.password = "Password is required";
+    if (!formData.confirmPassword) newErrors.confirmPassword = "Confirm Password is required";
+    if (formData.password && formData.confirmPassword && formData.password !== formData.confirmPassword) {
+      newErrors.confirmPassword = "Passwords do not match";
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  // Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     if (!validateForm()) return;
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-    // derive values locally (NO state)
     const isEmail = emailRegex.test(formData.entry);
 
     const payload = {
       email: isEmail ? formData.entry : null,
       tel: isEmail ? null : formData.entry,
       password: formData.password,
-      confirmPassword: formData.confirmPassword,
+      password_confirmation: formData.confirmPassword,
     };
 
     setLoading(true);
 
     try {
-      const response = await axios.post(
-        `${API_BASE_URL}/api/students/register`,
-        payload,
-      );
+      const response = await axios.post(`${API_BASE_URL}/api/students/register`, payload);
 
       if (response.status === 201) {
-        setToast({ type: "success", message: response.data.message });
-        if (payload.tel) {
-          setMsg({
-            text: "Registration successful! Please check your phone for the OTP.",
-            type: "success",
-          });
-
-          setTimeout(() => {
+        setToast({ type: "success", message: "Registration successful!" });
+        
+        setTimeout(() => {
+          if (payload.tel) {
             navigate(`/register/student/phone/verify?tel=${payload.tel}`);
-          }, 3000);
-        } else {
-          setMsg({
-            text: "Registration successful! Please check your email.",
-            type: "success",
-          });
-        }
+          } else {
+            // For now, assuming standard flow — update if email verification is needed
+             setToast({ type: "success", message: "Registration successful! Proceeding..." });
+          }
+        }, 2000);
       }
     } catch (error) {
       setToast({
         type: "error",
         message: error?.response?.data?.message || "Registration failed.",
       });
-
-      setMsg({
-        text: error?.response?.data?.message || "Registration failed.",
-        type: "error",
-      });
-
       setErrors(error?.response?.data?.errors || {});
     } finally {
       setLoading(false);
@@ -112,203 +89,198 @@ export default function StudentRegistration() {
   };
 
   return (
-    <>
-      <div className="w-full min-h-screen md:h-screen flex flex-col md:flex-row font-sans overflow-x-hidden">
-        {/* LEFT SIDE: Content Area */}
-        <div className="w-full md:w-1/2 h-full bg-[#F4F4F4] flex flex-col justify-center relative px-6 py-10 lg:px-[100px] lg:py-[60px] order-2 md:order-1 overflow-y-auto">
-          {/* 1. TOP NAV */}
-          <div className="relative w-full flex items-center justify-center mb-8 md:mb-10">
-            <button
-              onClick={() => navigate("/register")}
-              className="absolute left-0 p-2 hover:bg-gray-200 rounded-full transition-all z-10"
-            >
-              <img
-                src={ReturnArrow}
-                alt="Back"
-                className="h-6 w-6 lg:h-5 lg:w-5"
-              />
-            </button>
-            <img
-              src={TC_logo}
-              alt="Logo"
-              className="h-[60px] md:h-[80px] w-auto object-contain"
-            />
-          </div>
-
-          {/* 2. CENTER PIECE */}
-          <div className="flex flex-col items-center w-full">
-            <div className="text-center mb-4">
-              <h1 className="text-3xl font-bold text-[#09314F]">
-                Student Registration
-              </h1>
-              <p className="text-gray-500 italic text-sm">
-                Register With E-Mail Address Or Phone Number
-              </p>
-              {msg.text && (
-                <h3
-                  className={`text-lg font-bold ${
-                    msg.type === "success" ? "text-green-500" : "text-red-500"
-                  }`}
-                >
-                  {msg.text}
-                </h3>
-              )}
-            </div>
-
-            <div className="bg-white shadow-sm border border-gray-100 rounded-lg p-6 flex flex-col items-center w-full">
-              {/* Toast */}
-              <div>
-                {toast && (
-                  <div
-                    className={`fixed top-5 right-5 z-50 px-4 py-3 rounded shadow-lg text-white transition-all duration-300 ${
-                      toast.type === "success" ? "bg-green-600" : "bg-red-600"
-                    }`}
-                  >
-                    {toast.message}
-                  </div>
-                )}
-              </div>
-              <div className="md:block w-full mt-auto">
-                <form
-                  autoComplete="off"
-                  action=""
-                  method="post"
-                  onSubmit={handleSubmit}
-                  className="space-y-5"
-                >
-                  {/* Email Input or phone number */}
-                  <div>
-                    <label className="block text-sm font-medium text-blue-900 mb-2">
-                      Email Address Or Phone Number
-                    </label>
-                    <input
-                      name="entry"
-                      type="text"
-                      value={formData.entry}
-                      onChange={handleChange}
-                      placeholder="E-mail Address or Phone Number"
-                      className={`w-full px-4 py-2 border rounded-lg ${
-                        errors.entry ? "border-red-500" : "border-gray-300"
-                      } focus:ring-2 focus:ring-blue-900 focus:border-transparent`}
-                    />
-                    {(errors.entry || errors.tel || errors.email) && (
-                      <p className="mt-1 text-sm text-red-500">
-                        {errors.entry || errors.tel || errors.email}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Password Input */}
-                  <div>
-                    <label className="block text-sm font-medium text-blue-900 mb-2">
-                      Password
-                    </label>
-                    <div className="relative">
-                      <input
-                        id="password"
-                        name="password"
-                        placeholder="Password"
-                        onChange={handleChange}
-                        type={showPassword ? "text" : "password"}
-                        value={formData.password}
-                        className={`appearance-none block w-full px-3 py-2 border rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 ${
-                          errors.password
-                            ? "border-red-500 focus:ring-red-500"
-                            : "border-gray-300 focus:ring-blue-900"
-                        }`}
-                      />
-                      <span
-                        className="absolute right-3 top-3.5 text-gray-400 hover:text-blue-500 transition-colors cursor-pointer"
-                        onClick={() => setShowPassword(!showPassword)}
-                      >
-                        {showPassword ? (
-                          <EyeSlashIcon className="h-4 w-5" />
-                        ) : (
-                          <EyeIcon className="h-4 w-5" />
-                        )}
-                      </span>
-                    </div>
-                    {errors.password && (
-                      <p className="mt-1 text-sm text-red-500">
-                        {errors.password}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Confirm Password Input */}
-                  <div>
-                    <label className="block text-sm font-medium text-blue-900 mb-2">
-                      Confirm Password
-                    </label>
-                    <div className="relative">
-                      <input
-                        id="confirmPassword"
-                        name="confirmPassword"
-                        placeholder="Confirm Password"
-                        onChange={handleChange}
-                        type={showConfirmPassword ? "text" : "password"}
-                        value={formData.confirmPassword}
-                        className={`appearance-none block w-full px-3 py-2 border rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 ${
-                          errors.confirmPassword
-                            ? "border-red-500 focus:ring-red-500"
-                            : "border-gray-300 focus:ring-blue-900"
-                        }`}
-                      />
-                      <span
-                        className="absolute right-3 top-3.5 text-gray-400 hover:text-blue-500 transition-colors cursor-pointer"
-                        onClick={() =>
-                          setShowConfirmPassword(!showConfirmPassword)
-                        }
-                      >
-                        {showConfirmPassword ? (
-                          <EyeSlashIcon className="h-4 w-5" />
-                        ) : (
-                          <EyeIcon className="h-4 w-5" />
-                        )}
-                      </span>
-                    </div>
-                    {errors.confirmPassword && (
-                      <p className="mt-1 text-sm text-red-500">
-                        {errors.confirmPassword}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Sign Up Button */}
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className={`w-full py-3 px-4 rounded-lg font-medium ${
-                      loading
-                        ? "bg-gray-400 cursor-not-allowed"
-                        : "bg-gradient-to-r from-[#09314F] to-[#E83831] hover:bg-green-800"
-                    } text-white transition-colors`}
-                  >
-                    Register
-                  </button>
-                </form>
-              </div>
-            </div>
+    <div className="w-full min-h-screen md:h-screen flex flex-col md:flex-row font-sans overflow-x-hidden">
+      {/* Toast Notification */}
+      {toast && (
+        <div 
+          className={`fixed top-5 right-5 z-50 px-6 py-4 rounded-2xl shadow-2xl text-white transition-all duration-500 transform translate-y-0 ${
+            toast.type === "success" ? "bg-[#76D287]" : "bg-[#E83831]"
+          } animate-in fade-in slide-in-from-top-4`}
+        >
+          <div className="flex items-center gap-3">
+             <div className="p-1 bg-white/20 rounded-full">
+               {toast.type === "success" ? "✓" : "✕"}
+             </div>
+             <p className="font-bold">{toast.message}</p>
           </div>
         </div>
+      )}
 
-        {/* RIGHT SIDE: The Visual Image */}
-        <div
-          className="w-full h-[192px] md:w-1/2 md:h-full bg-cover bg-center relative bg-gray-300 order-1 md:order-2"
-          style={{ backgroundImage: `url(${signup_img})` }}
-        >
-          {/* Login Button */}
-          <div className="hidden md:block absolute bottom-[60px] left-0">
-            <button
-              onClick={() => navigate("/login")}
-              className="px-8 py-3 bg-white text-[#09314F] font-bold hover:bg-gray-100 transition-all shadow-md"
-              style={{ borderRadius: "0px 20px 20px 0px" }}
-            >
-              Login
-            </button>
+      {/* LEFT SIDE: Form Area */}
+      <div className="w-full md:w-1/2 h-full bg-white flex flex-col px-6 py-10 lg:px-[100px] lg:py-[60px] order-2 md:order-1 overflow-y-auto">
+        
+        {/* Top Navbar */}
+        <div className="relative w-full flex items-center justify-center mb-10">
+          <button 
+            onClick={() => navigate("/register")}
+            className="absolute left-0 p-3 bg-[#F7EFEF] hover:bg-gray-100 rounded-2xl transition-all active:scale-90"
+          >
+            <ChevronLeftIcon className="h-5 w-5 text-[#09314F] stroke-[2.5]" />
+          </button>
+          
+          <img 
+            src={TC_logo} 
+            alt="Tutorial Center Logo" 
+            className="h-[60px] md:h-[70px] drop-shadow-sm" 
+          />
+        </div>
+
+        {/* Center Contents */}
+        <div className="w-full max-w-[480px] mx-auto">
+          <div className="text-center mb-10">
+            <h1 className="text-3xl md:text-4xl font-extrabold text-[#09314F] mb-3">
+              Student Registration
+            </h1>
+            <p className="text-[#888888] font-medium italic">
+              Register With E-Mail Address Or Phone Number
+            </p>
           </div>
+
+          <form onSubmit={handleSubmit} className="space-y-6">
+            
+            {/* Email/Phone Input */}
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-[#444444] px-1 text-left block">
+                Email Address Or Phone Number
+              </label>
+              <div className={`flex items-center bg-[#F7EFEF] rounded-2xl px-5 py-4 border-2 transition-all ${errors.entry ? "border-red-400" : "border-transparent focus-within:border-[#09314F]"}`}>
+                <input
+                  name="entry"
+                  type="text"
+                  value={formData.entry}
+                  onChange={handleChange}
+                  placeholder="you@example.com or +234xxxxxxxxxx"
+                  className="bg-transparent w-full outline-none text-[#333333] font-semibold placeholder:text-gray-400"
+                />
+              </div>
+              {errors.entry && <p className="text-xs text-red-500 font-bold px-1">{errors.entry}</p>}
+            </div>
+
+            {/* Password */}
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-[#444444] px-1 text-left block">
+                Password
+              </label>
+              <div className={`flex items-center bg-[#F7EFEF] rounded-2xl px-5 py-4 border-2 transition-all ${errors.password ? "border-red-400" : "border-transparent focus-within:border-[#09314F]"}`}>
+                <div className="relative w-full flex items-center">
+                   <button 
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="mr-3"
+                  >
+                    {showPassword ? (
+                      <EyeSlashIcon className="h-5 w-5 text-gray-600" />
+                    ) : (
+                      <EyeIcon className="h-5 w-5 text-gray-600" />
+                    )}
+                  </button>
+                  <input
+                    name="password"
+                    type={showPassword ? "text" : "password"}
+                    value={formData.password}
+                    onChange={handleChange}
+                    className="bg-transparent w-full outline-none text-[#333333] font-semibold"
+                  />
+                </div>
+              </div>
+              {errors.password && <p className="text-xs text-red-500 font-bold px-1">{errors.password}</p>}
+            </div>
+
+            {/* Confirm Password */}
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-[#444444] px-1 text-left block">
+                Confirm Password
+              </label>
+              <div className={`flex items-center bg-[#F7EFEF] rounded-2xl px-5 py-4 border-2 transition-all ${errors.confirmPassword ? "border-red-400" : "border-transparent focus-within:border-[#09314F]"}`}>
+                <div className="relative w-full flex items-center">
+                  <button 
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="mr-3"
+                  >
+                    {showConfirmPassword ? (
+                      <EyeSlashIcon className="h-5 w-5 text-gray-600" />
+                    ) : (
+                      <EyeIcon className="h-5 w-5 text-gray-600" />
+                    )}
+                  </button>
+                  <input
+                    name="confirmPassword"
+                    type={showConfirmPassword ? "text" : "password"}
+                    value={formData.confirmPassword}
+                    onChange={handleChange}
+                    className="bg-transparent w-full outline-none text-[#333333] font-semibold"
+                  />
+                </div>
+              </div>
+              {errors.confirmPassword && <p className="text-xs text-red-500 font-bold px-1">{errors.confirmPassword}</p>}
+            </div>
+
+            {/* Remember Me */}
+            <div className="flex items-center space-x-2 px-1 py-1">
+              <input
+                id="rememberMe"
+                name="rememberMe"
+                type="checkbox"
+                checked={formData.rememberMe}
+                onChange={handleChange}
+                className="w-4 h-4 rounded border-gray-300 text-[#09314F] shadow-sm focus:ring-[#09314F] cursor-pointer accent-[#09314F]"
+              />
+              <label htmlFor="rememberMe" className="text-sm font-bold text-[#555555] cursor-pointer select-none">
+                Remember me
+              </label>
+            </div>
+
+            {/* Submit Button */}
+            <button
+              type="submit"
+              disabled={loading}
+              className={`w-full py-5 rounded-[20px] font-bold text-lg text-white shadow-xl transition-all active:scale-[0.98] ${
+                loading
+                  ? "bg-gray-400 opacity-70 cursor-not-allowed"
+                  : "bg-gradient-to-r from-[#09314F] to-[#E83831] hover:shadow-[#E8383155] hover:-translate-y-0.5"
+              }`}
+            >
+              {loading ? (
+                <div className="flex items-center justify-center gap-2">
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Processing...
+                </div>
+              ) : (
+                "Register"
+              )}
+            </button>
+          </form>
+
+          {/* Social Sign Up Divider */}
+          <div className="relative flex items-center justify-center my-8">
+            <div className="border-t border-gray-200 w-full"></div>
+            <span className="bg-white px-4 text-xs font-bold text-[#999999] absolute">Or continue with</span>
+          </div>
+
+          {/* Google Button */}
+          <button className="w-full py-4 border-2 border-[#EEEEEE] rounded-[20px] flex items-center justify-center gap-3 hover:bg-gray-50 transition-colors shadow-sm active:scale-[0.98]">
+             <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="h-5 w-5" />
+             <span className="font-bold text-[#555555]">Sign up with Google</span>
+          </button>
         </div>
       </div>
-    </>
+
+      {/* RIGHT SIDE: Visual Image */}
+      <div
+        className="w-full h-[300px] md:w-1/2 md:h-full bg-cover bg-center relative bg-gray-300 order-1 md:order-2"
+        style={{ backgroundImage: `url(${signup_img})` }}
+      >
+        <div className="hidden md:block absolute bottom-[60px] left-0">
+          <button
+            onClick={() => navigate("/login")}
+            className="px-8 py-3 bg-white text-[#09314F] font-bold hover:bg-gray-100 transition-all shadow-md"
+            style={{ borderRadius: "0px 20px 20px 0px" }}
+          >
+            Login
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
