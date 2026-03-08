@@ -24,7 +24,7 @@ export default function StudentTrainingSelection() {
         const response = await axios.get(`${API_BASE_URL}/api/courses`);
         // Log the full raw response to verify the shape coming from the backend
         console.log("[TrainingSelection] raw response.data:", response?.data);
-        const fetched = response?.data?.data || [];
+        const fetched = response?.data?.courses || [];
         if (fetched.length === 0) {
           console.warn("[TrainingSelection] No courses resolved — check that response.data.courses exists and is non-empty.");
         }
@@ -70,10 +70,11 @@ export default function StudentTrainingSelection() {
       throw new Error("Student data not found in localStorage");
     }
 
-    // 2️⃣ Attach selected trainings
+    // 2️⃣ Attach selected trainings + the full courses list so downstream pages can resolve titles
     const updatedStudentData = {
       ...studentData,
       selectedTraining, // 👈 stored here
+      availableTrainings: courses, // 👈 full list with titles for the success screen
     };
 
     // 3️⃣ Save back to localStorage

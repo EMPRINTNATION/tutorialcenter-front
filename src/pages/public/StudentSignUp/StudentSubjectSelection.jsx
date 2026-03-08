@@ -34,57 +34,78 @@ export const StudentSubjectSelection = () => {
 
   /* ================= INIT ================= */
   useEffect(() => {
-    const init = async () => {
-      try {
-        const studentData = JSON.parse(localStorage.getItem("studentdata"));
-        console.log("StudentData from localStorage.getItem", studentData);
-        const storedTraining = studentData?.selectedTraining;
-        const department = studentData?.data?.department;
+  const init = async () => {
+    try {
+      const studentData = JSON.parse(localStorage.getItem("studentdata"));
+      console.log(" StudentData:", studentData);
 
-        console.log("Selected Training IDs:", storedTraining)
-        console.log("Department:", department)
+      const storedTraining = studentData?.selectedTraining;
+      const department = studentData?.data?.department;
 
-        if (!storedTraining?.length || !department) {
-          navigate("/register/student/training/selection");
-          return;
-        }
+      console.log(" Selected Training:", storedTraining);
+      console.log(" Department:", department);
 
-        const courseRes = await axios.get(`${API_BASE_URL}/api/courses`);
-        console.log("Raw course response:", courseRes.data);
-
-        const allCourses = courseRes.data.data || [];
-        console.log(" All courses:", allCourses);
-        const activeCourses = allCourses.filter((c) => storedTraining.includes(c.id));
-        console.log(" Active courses (filtered):", activeCourses);
-        setSelectedCourses(activeCourses);
-
-        const subjectMap = {};
-        const selectionMap = {};
-
-        for (const course of activeCourses) {
-          console.log(`🔍 Fetching subjects for course ${course.id} (${course.title}) - department: ${department}`);
-          const res = await axios.get(
-            `${API_BASE_URL}/courses/${course.id}/subjects/${department}`
-          );
-          console.log(`📖 Subjects response for ${course.title}:`, res.data);
-          subjectMap[course.id] = res.data.subjects || [];
-          selectionMap[course.id] = [];
-          console.log(`📝 Subjects for ${course.title}:`, subjectMap[course.id]);
-        }
-
-         console.log("🗺️ Final subjectMap:", subjectMap);
-        console.log("🗺️ Final selectionMap:", selectionMap);
-
-        setSubjectsByCourse(subjectMap);
-        setSelectedSubjects(selectionMap);
-      } catch (err) {
-        console.error("Initialization failed:", err);
-        // console.error("💥 Initialization failed:", err);
-        console.error("💥 Error response:", err.response?.data);
-        console.error("💥 Error status:", err.response?.status);
+      if (!storedTraining?.length || !department) {
+        console.warn(" Missing data");
+        navigate("/register/student/training/selection");
+        return;
       }
-    };
-    init();
+
+      // Fetch courses
+      const courseRes = await axios.get(`${API_BASE_URL}/api/courses`);
+      console.log("Courses response:", courseRes.data);
+
+      const allCourses = courseRes.data.data || courseRes.data.courses || [];
+      const activeCourses = allCourses.filter((c) => storedTraining.includes(c.id));
+      
+      console.log("Active courses:", activeCourses);
+      setSelectedCourses(activeCourses);
+
+      const subjectMap = {};
+      const selectionMap = {};
+
+      // Fetch subjects for each course
+      for (const course of activeCourses) {
+        console.log(`\n Fetching subjects for course ${course.id} (${course.title})`);
+        console.log(` URL: ${API_BASE_URL}/api/courses/${course.id}/subjects/${department}`);
+        
+        try {
+          const res = await axios.get(
+            `${API_BASE_URL}/api/courses/${course.id}/subjects/${department}`
+          );
+          
+          console.log(`✅ Success for ${course.title}:`, res.data);
+          
+          const subjects = res.data.subjects || [];
+          console.log(`📝 ${subjects.length} subjects found`);
+          
+          subjectMap[course.id] = subjects;
+          selectionMap[course.id] = [];
+          
+        } catch (err) {
+          console.error(`\n FAILED for ${course.title}`);
+          console.error("Error object:", err);
+          console.error("Response status:", err.response?.status);
+          console.error("Response data:", err.response?.data);
+          console.error("Response headers:", err.response?.headers);
+          
+          // ✅ Set empty arrays so UI doesn't break
+          subjectMap[course.id] = [];
+          selectionMap[course.id] = [];
+        }
+      }
+
+      console.log("\n🗺️ Final subjects map:", subjectMap);
+      
+      setSubjectsByCourse(subjectMap);
+      setSelectedSubjects(selectionMap);
+
+    } catch (err) {
+      console.error("💥 Init failed:", err);
+    }
+  };
+  
+  init();
   // API_BASE_URL is a module-level constant so it's excluded from deps safely.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate]);
