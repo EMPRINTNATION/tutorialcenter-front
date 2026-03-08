@@ -19,13 +19,18 @@ export const StudentPaymentSuccessScreen = () => {
 
         const studentData = JSON.parse(stored);
 
+        // --- Debug: confirm what's stored ---
+        console.log("[PaymentSuccess] availableTrainings:", studentData.availableTrainings);
+        console.log("[PaymentSuccess] selectedTraining:", studentData.selectedTraining);
+
         // --- Getting Names by ID from the stored data ---
         const enrichedCourses = (studentData.selectedTraining || []).map((id) => {
           // We look into the trainings list already in your localStorage
           const courseDetail = studentData.availableTrainings?.find((c) => c.id === id);
+          console.log(`[PaymentSuccess] id=${id} → courseDetail:`, courseDetail);
           return {
             id,
-            name: courseDetail?.training_name || `Course ${id}`, // Dynamic name
+            name: courseDetail?.title || `Course ${id}`, // Dynamic name
             duration: studentData.selectedDurations[id]?.duration || "Access Granted",
           };
         });
@@ -63,7 +68,7 @@ export const StudentPaymentSuccessScreen = () => {
           
           {/* Success Icon */}
           <div className="w-20 h-20 rounded-full bg-[#09314F] flex items-center justify-center mb-6">
-            <CheckCircleIcon className="w-12 h-12 text-[#76D287]" />
+            <CheckCircleIcon className="w-12 h-12 text-white" />
           </div>
 
           {/* Success Message */}

@@ -10,11 +10,15 @@ import {
   XMarkIcon,
 } from "@heroicons/react/24/outline";
 
+// Defined outside the component so it's a stable reference and won't
+// cause the init useEffect to re-run on every render.
+const API_BASE_URL = process.env.REACT_APP_API_URL || "http://tutorialcenter-back.test";
+
 export const StudentSubjectSelection = () => {
   const navigate = useNavigate();
   const dropdownRef = useRef(null);
 
-  const API_BASE_URL = process.env.REACT_APP_API_URL || "http://tutorialcenter-back.test";
+
 
   const [selectedCourses, setSelectedCourses] = useState([]);
   const [subjectsByCourse, setSubjectsByCourse] = useState({});
@@ -30,42 +34,81 @@ export const StudentSubjectSelection = () => {
 
   /* ================= INIT ================= */
   useEffect(() => {
-    const init = async () => {
-      try {
-        const studentData = JSON.parse(localStorage.getItem("studentdata"));
-        const storedTraining = studentData?.selectedTraining;
-        const department = studentData?.data?.department;
+  const init = async () => {
+    try {
+      const studentData = JSON.parse(localStorage.getItem("studentdata"));
+      console.log(" StudentData:", studentData);
 
-        if (!storedTraining?.length || !department) {
-          navigate("/register/student/training/selection");
-          return;
-        }
+      const storedTraining = studentData?.selectedTraining;
+      const department = studentData?.data?.department;
 
-        const courseRes = await axios.get(`${API_BASE_URL}/api/courses`);
-        const allCourses = courseRes.data.courses || [];
-        const activeCourses = allCourses.filter((c) => storedTraining.includes(c.id));
+      console.log(" Selected Training:", storedTraining);
+      console.log(" Department:", department);
 
-        setSelectedCourses(activeCourses);
+      if (!storedTraining?.length || !department) {
+        console.warn(" Missing data");
+        navigate("/register/student/training/selection");
+        return;
+      }
 
-        const subjectMap = {};
-        const selectionMap = {};
+      // Fetch courses
+      const courseRes = await axios.get(`${API_BASE_URL}/api/courses`);
+      console.log("Courses response:", courseRes.data);
 
-        for (const course of activeCourses) {
+      const allCourses = courseRes.data.data || courseRes.data.courses || [];
+      const activeCourses = allCourses.filter((c) => storedTraining.includes(c.id));
+      
+      console.log("Active courses:", activeCourses);
+      setSelectedCourses(activeCourses);
+
+      const subjectMap = {};
+      const selectionMap = {};
+
+      // Fetch subjects for each course
+      for (const course of activeCourses) {
+        console.log(`\n Fetching subjects for course ${course.id} (${course.title})`);
+        console.log(` URL: ${API_BASE_URL}/api/courses/${course.id}/subjects/${department}`);
+        
+        try {
           const res = await axios.get(
             `${API_BASE_URL}/api/courses/${course.id}/subjects/${department}`
           );
-          subjectMap[course.id] = res.data.subjects || [];
+          
+          console.log(`✅ Success for ${course.title}:`, res.data);
+          
+          const subjects = res.data.subjects || [];
+          console.log(`📝 ${subjects.length} subjects found`);
+          
+          subjectMap[course.id] = subjects;
+          selectionMap[course.id] = [];
+          
+        } catch (err) {
+          console.error(`\n FAILED for ${course.title}`);
+          console.error("Error object:", err);
+          console.error("Response status:", err.response?.status);
+          console.error("Response data:", err.response?.data);
+          console.error("Response headers:", err.response?.headers);
+          
+          // ✅ Set empty arrays so UI doesn't break
+          subjectMap[course.id] = [];
           selectionMap[course.id] = [];
         }
-
-        setSubjectsByCourse(subjectMap);
-        setSelectedSubjects(selectionMap);
-      } catch (err) {
-        console.error("Initialization failed:", err);
       }
-    };
-    init();
-  }, [navigate, API_BASE_URL]);
+
+      console.log("\n🗺️ Final subjects map:", subjectMap);
+      
+      setSubjectsByCourse(subjectMap);
+      setSelectedSubjects(selectionMap);
+
+    } catch (err) {
+      console.error("💥 Init failed:", err);
+    }
+  };
+  
+  init();
+  // API_BASE_URL is a module-level constant so it's excluded from deps safely.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigate]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -77,6 +120,13 @@ export const StudentSubjectSelection = () => {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  // Auto-dismiss toast after 3 seconds
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 3000);
+    return () => clearTimeout(timer);
+  }, [toast]);
 
   /* ================= SUBJECT TOGGLE ================= */
   const toggleSubject = (courseId, subjectId) => {
@@ -154,8 +204,8 @@ export const StudentSubjectSelection = () => {
           </p>
         </div>
 
-        {/* Table Container */}
-        <div className="w-full max-w-[500px] bg-white rounded-[32px] shadow-[0_20px_50px_rgba(0,0,0,0.04)] border border-gray-100 mb-8 relative z-10">
+        {/* Table Container — ref placed here so click-outside works for ALL course dropdowns */}
+        <div ref={dropdownRef} className="w-full max-w-[500px] bg-white rounded-[32px] shadow-[0_20px_50px_rgba(0,0,0,0.04)] border border-gray-100 mb-8 relative z-10">
           {/* Table Header */}
           <div className="grid grid-cols-[120px_minmax(0,1fr)_80px] bg-[#09314F] text-white px-6 py-4 rounded-t-[32px]">
             <span className="text-sm font-black uppercase tracking-widest px-2">Examination</span>
@@ -200,7 +250,6 @@ export const StudentSubjectSelection = () => {
                     {/* Dropdown Overlay */}
                     {isOpen && (
                       <div 
-                        ref={dropdownRef}
                         className={`${dropdownTheme.overlay.container} w-[280px]`}
                       >
                         <p className={dropdownTheme.overlay.header}>

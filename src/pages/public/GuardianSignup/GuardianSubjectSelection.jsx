@@ -49,7 +49,7 @@ export default function GuardianSubjectSelection() {
 
             for (const course of activeCourses) {
               const res = await axios.get(
-                `${API_BASE_URL}/api/courses/${course.id}/subjects/${student.department}`
+                `${API_BASE_URL}/courses/${course.id}/subjects/${student.department}`
               );
               subjectsByCourse[course.id] = res.data.subjects || [];
               selectedSubjects[course.id] = [];
